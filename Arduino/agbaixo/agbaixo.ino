@@ -1,25 +1,19 @@
-/* @file CustomKeypad.pde
-  || @version 1.0
-  || @author Alexander Brevig
-  || @contact alexanderbrevig@gmail.com
-  ||
-  || @description
-  || | Demonstrates changing the keypad size and key values.
-  || #
-*/
 #include <Keypad.h>
 #include "MIDIUSB.h"
 
-const byte ROWS = 4; //four rows
-const byte COLS = 4; //four columns
+const byte LINHAS = 4;
+const byte COLUNAS = 4;
 
-const int MIDI_CHANNEL = 10;
+const int MIDI_CHANNEL = 9;
 
-byte colPins[ROWS] = {2, 3, 4, 5}; //connect to the row pinouts of the keypad
-byte rowPins[COLS] = {9, 8, 7, 6}; //connect to the column pinouts of the keypad
-byte pinoSensor = A3;
+const byte TEMPO_LEITURA_PIEZO = 10;
 
-char hexaKeys[ROWS][COLS] = {
+const byte pinosColunas[LINHAS] = {2, 3, 4, 5};
+const byte pinosLinhas[COLUNAS] = {9, 8, 7, 6};
+const byte pinoSensor = A3;
+const byte pinoPiezo = A0;
+
+char hexaKeys[LINHAS][COLUNAS] = {
   {'0', '4', '8', 'C'},
   {'1', '5', '9', 'D'},
   {'2', '6', 'A', 'E'},
@@ -27,18 +21,25 @@ char hexaKeys[ROWS][COLS] = {
 };
 
 //initialize an instance of class NewKeypad
-Keypad teclado = Keypad( makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
+Keypad teclado = Keypad( makeKeymap(hexaKeys), pinosLinhas, pinosColunas, LINHAS, COLUNAS);
 
 String msg;
 
-int key_order[ROWS * COLS] = {
+int key_order[LINHAS * COLUNAS] = {
   1, 5, 9, 13,
   2, 6, 10,  14,
   3, 7, 11, 15,
   4, 8, 12, 16
 };
 
-byte notaMidi[ROWS * COLS] = {
+bool chaves_invertidas[LINHAS * COLUNAS] = {
+  true, false,  false, false,
+  true,  true,  false, false,
+  true,  true,  false, false,
+  false,  true, false, false
+};
+
+byte notaMidi[LINHAS * COLUNAS] = {
   60, 64, 68, 72,
   61, 65, 69, 73,
   62, 66, 70, 74,
@@ -50,6 +51,14 @@ byte ccMidiSensor = 11;
 int leituraAnalogicaAtual;
 int ultimaLeituraAnalogica;
 float leituraAnalogicaFiltrada;
+
+unsigned long tempo = 0;
+unsigned long tempoAnterior = 0;
+int picoPiezo = 0;
+int velocityPiezo = 127;
+int velocity = 100;
+int velocityMinimo = 20;
+int sensibilidadePiezo = 600;
 
 void setup() {
   Serial.begin(9600);
@@ -72,20 +81,72 @@ void loop() {
       if (teclado.key[i].stateChanged) {
         switch (teclado.key[i].kstate) {  // Report active key state : IDLE, PRESSED, HOLD, or RELEASED
           case PRESSED:
-            msg = " APERTADA.";
-            //            MIDI.sendNoteOn(notas_abrindo[key_order[teclado.key[i].kcode]] - 12, 60, MIDI_CHANNEL);
-            noteOn(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], 64);   // Channel 0, middle C, normal velocity
-            MidiUSB.flush();
-            break;
+            if (chaves_invertidas[teclado.key[i].kcode]) {
+              //chaves na real são soltas,
+              //nesse caso tem que ter o mesmo código aqui e embaixo
+              msg = " SOLTA.";
+              //            MIDI.sendNoteOff(notas_abrindo[key_order[teclado.key[i].kcode]] - 12, 0, MIDI_CHANNEL);
+              noteOff(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], 0);  // Channel 0, middle C, normal velocity
+              MidiUSB.flush();
+              break;
+            } else {
+              msg = " APERTADA.";
+              //            MIDI.sendNoteOn(notas_abrindo[key_order[teclado.key[i].kcode]] - 12, 60, MIDI_CHANNEL);
+
+              if (notaMidi[teclado.key[i].kcode] > 67) {
+                //começa detecção de velocity com piezo
+                int leituraPiezo = analogRead(pinoPiezo);
+                picoPiezo = leituraPiezo;
+                tempo = millis();
+                tempoAnterior = tempo;
+                while (tempo - tempoAnterior <= TEMPO_LEITURA_PIEZO) {
+                  //        Serial.println(tempo - tempoAnterior);
+                  leituraPiezo = analogRead(pinoPiezo);
+                  if (leituraPiezo > picoPiezo) {
+                    picoPiezo = leituraPiezo;
+                    //                  Serial.println(picoPiezo);
+                  }
+                  tempo = millis();
+                }
+                //              Serial.println(picoPiezo);
+                velocityPiezo = map(picoPiezo, 0, sensibilidadePiezo, velocityMinimo, 127);
+                if (velocityPiezo > 127) {
+                  velocityPiezo = 127;
+                } if (velocityPiezo < velocityMinimo) {
+                  velocityPiezo = velocityMinimo;
+                }
+              } else {
+                velocityPiezo = 127;
+              }
+
+              //Dispara a nota
+//              noteOn(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], velocityPiezo);   // Channel 0, middle C, normal velocity
+              noteOn(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], velocity);   // Channel 0, middle C, normal velocity
+              MidiUSB.flush();
+              break;
+            }
           case HOLD:
             msg = " SEGURADA.";
             break;
           case RELEASED:
-            msg = " SOLTA.";
-            //            MIDI.sendNoteOff(notas_abrindo[key_order[teclado.key[i].kcode]] - 12, 0, MIDI_CHANNEL);
-            noteOff(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], 0);  // Channel 0, middle C, normal velocity
-            MidiUSB.flush();
-            break;
+            if (chaves_invertidas[teclado.key[i].kcode]) {
+              //chaves na real são presas nesse caso
+              //nesse caso tem que ter o mesmo código aqui e em cima
+              msg = " APERTADA.";
+              //            MIDI.sendNoteOn(notas_abrindo[key_order[teclado.key[i].kcode]] - 12, 60, MIDI_CHANNEL);
+              velocityPiezo = 127;
+
+              //Dispara a nota
+              noteOn(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], velocity);   // Channel 0, middle C, normal velocity
+              MidiUSB.flush();
+              break;
+            } else {
+              msg = " SOLTA.";
+              //            MIDI.sendNoteOff(notas_abrindo[key_order[teclado.key[i].kcode]] - 12, 0, MIDI_CHANNEL);
+              noteOff(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], 0);  // Channel 0, middle C, normal velocity
+              MidiUSB.flush();
+              break;
+            }
           case IDLE:
             msg = " SOLTISSIMA.";
         }
