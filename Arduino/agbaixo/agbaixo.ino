@@ -1,5 +1,7 @@
 #include <Keypad.h>
 #include "MIDIUSB.h"
+#include <Bounce2.h>
+
 
 const byte LINHAS = 4;
 const byte COLUNAS = 4;
@@ -12,6 +14,8 @@ const byte pinosColunas[LINHAS] = {2, 3, 4, 5};
 const byte pinosLinhas[COLUNAS] = {9, 8, 7, 6};
 const byte pinoSensor = A3;
 const byte pinoPiezo = A0;
+const byte pinoBotaoModo = 15;
+const byte pinoLedBotaoModo = A1;
 
 char hexaKeys[LINHAS][COLUNAS] = {
   {'0', '4', '8', 'C'},
@@ -46,6 +50,12 @@ byte notaMidi[LINHAS * COLUNAS] = {
   63, 67, 71, 75
 };
 
+byte divisoesDoCompasso[8] = {
+  1, 2, 3, 4,
+  6, 8, 12, 24
+};
+
+
 byte ccMidiSensor = 11;
 
 int leituraAnalogicaAtual;
@@ -55,13 +65,26 @@ float leituraAnalogicaFiltrada;
 unsigned long tempo = 0;
 unsigned long tempoAnterior = 0;
 int picoPiezo = 0;
-int velocityPiezo = 127;
-int velocity = 100;
-int velocityMinimo = 20;
-int sensibilidadePiezo = 600;
+byte velocityPiezo = 127;
+byte velocityMinimo = 20;
+byte sensibilidadePiezo = 600;
+
+int ultimoBotao[2];
+int ultimoBaixo;
+int bpm = 120;
+unsigned long previousMillis = 0;
+unsigned long previousMillisMetro = 0;
+int ledState = LOW;
+Bounce botaoModo = Bounce();
+int botoesApertados = 0;
+unsigned long tempoBotao = 0;
+unsigned long tempoBotaoAnterior = 0;
 
 void setup() {
   Serial.begin(9600);
+  pinMode(pinoLedBotaoModo, OUTPUT);
+  botaoModo.attach(pinoBotaoModo, INPUT_PULLUP);
+  botaoModo.interval(10);
 }
 
 void loop() {
@@ -81,79 +104,116 @@ void loop() {
       if (teclado.key[i].stateChanged) {
         switch (teclado.key[i].kstate) {  // Report active key state : IDLE, PRESSED, HOLD, or RELEASED
           case PRESSED:
-            if (chaves_invertidas[teclado.key[i].kcode]) {
-              //chaves na real são soltas,
-              //nesse caso tem que ter o mesmo código aqui e embaixo
-              msg = " SOLTA.";
-              //            MIDI.sendNoteOff(notas_abrindo[key_order[teclado.key[i].kcode]] - 12, 0, MIDI_CHANNEL);
-              noteOff(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], 0);  // Channel 0, middle C, normal velocity
-              MidiUSB.flush();
-              break;
-            } else {
-              msg = " APERTADA.";
-              //            MIDI.sendNoteOn(notas_abrindo[key_order[teclado.key[i].kcode]] - 12, 60, MIDI_CHANNEL);
+            msg = " APERTADA.";
+            //            MIDI.sendNoteOn(notas_abrindo[key_order[teclado.key[i].kcode]] - 12, 60, MIDI_CHANNEL);
 
-              if (notaMidi[teclado.key[i].kcode] > 67) {
-                //começa detecção de velocity com piezo
-                int leituraPiezo = analogRead(pinoPiezo);
-                picoPiezo = leituraPiezo;
+            if (notaMidi[teclado.key[i].kcode] > 67) { //só pega velocity se for da mão direita (notas de 68 a 75)
+              //começa detecção de velocity com piezo
+              botoesApertados++;
+              Serial.println(botoesApertados);
+              int leituraPiezo = analogRead(pinoPiezo);
+              picoPiezo = leituraPiezo;
+              tempo = millis();
+              tempoAnterior = tempo;
+              while (tempo - tempoAnterior <= TEMPO_LEITURA_PIEZO) {
+                //        Serial.println(tempo - tempoAnterior);
+                leituraPiezo = analogRead(pinoPiezo);
+                if (leituraPiezo > picoPiezo) {
+                  picoPiezo = leituraPiezo;
+                  //                  Serial.println(picoPiezo);
+                }
                 tempo = millis();
-                tempoAnterior = tempo;
-                while (tempo - tempoAnterior <= TEMPO_LEITURA_PIEZO) {
-                  //        Serial.println(tempo - tempoAnterior);
-                  leituraPiezo = analogRead(pinoPiezo);
-                  if (leituraPiezo > picoPiezo) {
-                    picoPiezo = leituraPiezo;
-                    //                  Serial.println(picoPiezo);
-                  }
-                  tempo = millis();
-                }
-                //              Serial.println(picoPiezo);
-                velocityPiezo = map(picoPiezo, 0, sensibilidadePiezo, velocityMinimo, 127);
-                if (velocityPiezo > 127) {
-                  velocityPiezo = 127;
-                } if (velocityPiezo < velocityMinimo) {
-                  velocityPiezo = velocityMinimo;
-                }
-              } else {
-                velocityPiezo = 127;
               }
-
-              //Dispara a nota
-//              noteOn(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], velocityPiezo);   // Channel 0, middle C, normal velocity
-              noteOn(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], velocity);   // Channel 0, middle C, normal velocity
-              MidiUSB.flush();
-              break;
+              //              Serial.println(picoPiezo);
+              velocityPiezo = map(picoPiezo, 0, sensibilidadePiezo, velocityMinimo, 127);
+              if (velocityPiezo > 127) {
+                velocityPiezo = 127;
+              } if (velocityPiezo < velocityMinimo) {
+                velocityPiezo = velocityMinimo;
+              }
+              ultimoBotao[0] = notaMidi[teclado.key[i].kcode];
+              ultimoBotao[1] = velocityPiezo;
+              //              Serial.print (ultimoBotao[0]);
+              //              Serial.print (", ");
+              //              Serial.println (ultimoBotao[1]);
+            } else { //se for um baixo (notas de 60 a 67)
+              velocityPiezo = 127;
+              ultimoBaixo = key_order[teclado.key[i].kcode];
+              //              Serial.println(ultimoBaixo);
             }
+
+            //Dispara a nota
+            //            noteOn(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], velocityPiezo);   // Channel 0, middle C, normal velocity
+            noteOn(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], 100);   // Channel 0, middle C, normal velocity
+            MidiUSB.flush();
+            break;
           case HOLD:
             msg = " SEGURADA.";
             break;
           case RELEASED:
-            if (chaves_invertidas[teclado.key[i].kcode]) {
-              //chaves na real são presas nesse caso
-              //nesse caso tem que ter o mesmo código aqui e em cima
-              msg = " APERTADA.";
-              //            MIDI.sendNoteOn(notas_abrindo[key_order[teclado.key[i].kcode]] - 12, 60, MIDI_CHANNEL);
-              velocityPiezo = 127;
-
-              //Dispara a nota
-              noteOn(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], velocity);   // Channel 0, middle C, normal velocity
-              MidiUSB.flush();
-              break;
-            } else {
-              msg = " SOLTA.";
-              //            MIDI.sendNoteOff(notas_abrindo[key_order[teclado.key[i].kcode]] - 12, 0, MIDI_CHANNEL);
-              noteOff(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], 0);  // Channel 0, middle C, normal velocity
-              MidiUSB.flush();
-              break;
+            if (notaMidi[teclado.key[i].kcode] > 67) {
+              botoesApertados--;
+              Serial.println(botoesApertados);
             }
+            msg = " SOLTA.";
+            //            MIDI.sendNoteOff(notas_abrindo[key_order[teclado.key[i].kcode]] - 12, 0, MIDI_CHANNEL);
+            noteOff(MIDI_CHANNEL - 1, notaMidi[teclado.key[i].kcode], 0);  // Channel 0, middle C, normal velocity
+            MidiUSB.flush();
+            break;
           case IDLE:
             msg = " SOLTISSIMA.";
         }
-        Serial.print("Tecla ");
-        Serial.print(key_order[teclado.key[i].kcode]);
-        Serial.println(msg);
+        //        Serial.print("Tecla ");
+        //        Serial.print(key_order[teclado.key[i].kcode]);
+        //        Serial.println(msg);
       }
+    }
+  }
+
+  botaoModo.update();
+  if (botaoModo.fell()) {
+    //    digitalWrite(pinoLedBotaoModo, HIGH);
+    //    Serial.println("APERTOU MODO");
+    tempoBotaoAnterior = tempoBotao;
+    tempoBotao = millis();
+    unsigned long intervalo = (tempoBotao - tempoBotaoAnterior);
+    unsigned long bpmBotao = 1000. / intervalo * 60.;
+    //  Serial.println(bpmBotao);
+    bpm = bpmBotao;
+    previousMillis = millis();
+  }
+
+  float interval = (1000 / bpm) * 60;
+  unsigned long currentMillisMetro = millis();
+
+  if (currentMillisMetro - previousMillisMetro > interval / 2) {
+    previousMillisMetro = currentMillisMetro;
+
+    // if the LED is off turn it on and vice-versa:
+    if (ledState == LOW) {
+      ledState = HIGH;
+      digitalWrite(pinoLedBotaoModo, ledState);
+    }
+    else {
+      ledState = LOW;
+      digitalWrite(pinoLedBotaoModo, ledState);
+      // set the LED with the ledState of the variable:
+    }
+  }
+
+  unsigned long currentMillis = millis();
+  if (botoesApertados > 0) {
+    if (currentMillis - previousMillis > interval / divisoesDoCompasso[ultimoBaixo - 1] * 4.) {
+      previousMillis = currentMillis;
+
+
+      noteOn(MIDI_CHANNEL - 1, ultimoBotao[0], ultimoBotao[1]);   // canal_midi, nota_midi, velocity_midi
+      MidiUSB.flush();
+
+      noteOff(MIDI_CHANNEL - 1, ultimoBotao[0], 0);   // canal_midi, nota_midi, velocity_midi
+      MidiUSB.flush();
+      // set the LED with the ledState of the variable:
+
     }
   }
 }
