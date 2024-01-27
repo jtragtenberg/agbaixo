@@ -35,13 +35,6 @@ int key_order[LINHAS * COLUNAS] = {
   4, 8, 12, 16
 };
 
-bool chaves_invertidas[LINHAS * COLUNAS] = {
-  true, false,  false, false,
-  true,  true,  false, false,
-  true,  true,  false, false,
-  false,  true, false, false
-};
-
 byte notaMidi[LINHAS * COLUNAS] = {
   60, 64, 68, 72,
   61, 65, 69, 73,
@@ -96,27 +89,21 @@ void setup() {
 }
 
 void loop() {
-  //  controlChange(MIDI_CHANNEL - 1, ccMidiSensor, analogRead(A3)/8);
+  /* Desativei o CC por enquanto
   leituraAnalogicaAtual = analogRead(pinoSensor);
   leituraAnalogicaFiltrada = filtrar(leituraAnalogicaAtual, leituraAnalogicaFiltrada, 0.9);
   int leituraAnalogicaMapeada = map(leituraAnalogicaFiltrada, 30, 1010, 0, 127);
   if (leituraAnalogicaMapeada != ultimaLeituraAnalogica) {
-    //      MIDI.sendControlChange(ccMIDI[i], leituraAnalogicaMapeada, MidiChan);
     controlChange(MIDI_CHANNEL - 1, ccMidiSensor, leituraAnalogicaMapeada);
     MidiUSB.flush();
   }
   ultimaLeituraAnalogica = leituraAnalogicaMapeada;
-
+*/
   if (teclado.getKeys()) {
     for (int i = 0; i < LIST_MAX; i++) {
       if (teclado.key[i].stateChanged) {
         switch (teclado.key[i].kstate) {  // Report active key state : IDLE, PRESSED, HOLD, or RELEASED
           case PRESSED:
-            if (chaves_invertidas[teclado.key[i].kcode]) {  //chaves dos baixos na real são soltas,
-              msg = " SOLTA.";
-              soltarBaixo(notaMidi[teclado.key[i].kcode]);
-              break;
-            } else {
               msg = " APERTADA.";
               if (key_order[teclado.key[i].kcode] > 8) { //se for botão
                 dispararBotao(teclado.key[i].kcode);
@@ -124,17 +111,11 @@ void loop() {
                 dispararBaixo(teclado.key[i].kcode);
               }
               break;
-            }
+//            }
           case HOLD:
             msg = " SEGURADA.";
             break;
           case RELEASED:
-            if (chaves_invertidas[teclado.key[i].kcode]) {
-              //chaves na real são presas nesse caso
-              msg = " APERTADA.";
-              dispararBaixo(teclado.key[i].kcode);
-              break;
-            } else {
               msg = " SOLTA.";
               if (key_order[teclado.key[i].kcode] > 8) {
                 soltarBotao(teclado.key[i].kcode);
@@ -142,13 +123,13 @@ void loop() {
                 soltarBaixo(teclado.key[i].kcode);
               }
               break;
-            }
+//            }
           case IDLE:
             msg = " SOLTISSIMA.";
         }
-//        Serial.print("Tecla ");
-//        Serial.print(key_order[teclado.key[i].kcode]);
-//        Serial.println(msg);
+        Serial.print("Tecla ");
+        Serial.print(key_order[teclado.key[i].kcode]);
+        Serial.println(msg);
       }
     }
   }
