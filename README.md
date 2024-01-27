@@ -1,5 +1,5 @@
 # Agbaixo
-Instrumento Agbaixo, em processo de criação pelo BongarBit
+Instrumento Agbaixo (também chamado de Agbau ou Agbaça), em processo de criação pelo BongarBit
 
 # Para manda o código para o Arduino:
 
