@@ -51,4 +51,8 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-.DS_Store
+*.DS_Store
+
+Circuito/fp-info-cache
+*.kicad_prl
+Circuito/Agbaixo_PCB-backups/
