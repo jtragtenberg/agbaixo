@@ -1,3 +1,0 @@
--include libraries/AudioFile/build/Makefile.link
--include libraries/Midi/build/Makefile.link
--include libraries/sndfile/build/Makefile.link
