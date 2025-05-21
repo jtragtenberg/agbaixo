@@ -2,6 +2,11 @@
 Instrumento Agbaixo (também chamado de Agbau ou Agbaça), em processo de criação pelo BongarBit
 
 [![Watch the video](https://youtu.be/48ikO1KuL8A)](https://youtu.be/48ikO1KuL8A)
+Vídeo de Ninho Brown, do Bongarbit, tocando o Agbau no Centro Cultural Grupo Bongar - Guitinho da Xambá em Olinda/PE
+
+Na pasta Arduino está o Firmware em C++ do microcontrolador AVR responsável por receber os dados dos botões e sensores e mandar por protocolo MIDI USB para o Bela
+
+Na pasta Bela está a engine de som em duas variantes para reproduzir os samples em tempo real juntamente com um processamento do sinal com uma envoltória exponencial otimizado para reduzir a demanda de processamento do Bela, opções de configuração do modo de disparo dos samples
 
 # Para mandar o código para o Arduino:
 
