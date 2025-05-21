@@ -1,6 +1,8 @@
 # Agbaixo
 Instrumento Agbaixo (também chamado de Agbau ou Agbaça), em processo de criação pelo BongarBit
 
+[![Watch the video](https://youtu.be/48ikO1KuL8A)](https://youtu.be/48ikO1KuL8A)
+
 # Para mandar o código para o Arduino:
 
 Baixe e instale o Arduino na versão legado (1.8.x) em https://www.arduino.cc/en/software
